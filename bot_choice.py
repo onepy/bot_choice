@@ -202,3 +202,4 @@ class BotChoice(Plugin):
                     return plugin_conf
         except Exception as e:
             logger.exception(e)
+
