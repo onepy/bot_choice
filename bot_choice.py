@@ -88,6 +88,8 @@ class BotChoice(Plugin):
 
                     if bot["keyword"] == "/随机小姐姐":
                         self._handle_xjj_video(e_context, url)
+                        e_context.action = EventAction.BREAK_PASS
+                        return
                     else:
                         openai_chat_url = url + "/chat/completions"
                         openai_headers = self._get_openai_headers(key)
