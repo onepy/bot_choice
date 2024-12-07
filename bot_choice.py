@@ -78,6 +78,11 @@ class BotChoice(Plugin):
             content_new = content
             for bot in self.bot_list:
                 if bot["keyword"] in content:
+                    if bot["keyword"] == "/随机小姐姐":
+                        self._handle_xjj_video(e_context, bot["url"])
+                        e_context.action = EventAction.BREAK_PASS
+                        return
+                        
                     url = bot["url"]
                     model = bot.get("model")
                     key = bot.get("key")
