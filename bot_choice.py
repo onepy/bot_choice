@@ -7,7 +7,6 @@ from channel.chat_message import ChatMessage
 import datetime
 
 from plugins import *
-
 @plugins.register(
     name="BotChoice",
     desire_priority=88,
@@ -21,7 +20,8 @@ class BotChoice(Plugin):
     bot_list = [
         {"url":"http://10.75.190.8:2029","model":"搜图片", "keyword":"/搜图片"},
         {"url":"http://10.75.190.8:2029","keyword":"视频文案"},
-        {"url":"https://api.pearktrue.cn/api/random/xjj/", "keyword":"/sjxjj"}  # 新增接口信息
+        {"url":"https://api.pearktrue.cn/api/random/xjj/", "keyword":"/sjxjj"},
+        {"url": "https://api.mossia.top/randPic/pixiv", "keyword": "/sjtp"}
     ]
     max_words = 8000
 
@@ -35,7 +35,7 @@ class BotChoice(Plugin):
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
             self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
-            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！\n🎉 娱乐与资讯：\n🌅 搜图: 发送“/搜图片 xxx”搜索你想要的图片。\n🐟 视频文案: 发送“/视频文案 链接地址”解析视频文案。\n🔥 /sjxjj: 获取随机搞笑视频。\n")
+            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！/GPT/星火/随机模型等🔥 /sjxjj: 获取随机搞笑视频。\n🖼️ /sjtp: 获取随机图片。\n")  # 更新帮助信息
             logger.info(f"[BotChoice] inited, config={self.config}")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
@@ -102,6 +102,20 @@ class BotChoice(Plugin):
                             channel.send(reply, context)
                         else:
                             reply = Reply(ReplyType.TEXT, "获取视频失败，请稍后再试")
+                            channel = e_context["channel"]
+                            channel.send(reply, context)
+                    # 如果是调用接口获取图片
+                    elif bot["keyword"] == "/sjtp":
+                        response = requests.get(url + "?r18=1")
+                        response.raise_for_status()
+                        result = response.json()
+                        image_url = result.get("data")
+                        if image_url:
+                            reply = Reply(ReplyType.IMAGE_URL, image_url)
+                            channel = e_context["channel"]
+                            channel.send(reply, context)
+                        else:
+                            reply = Reply(ReplyType.TEXT, "获取图片失败，请稍后再试")
                             channel = e_context["channel"]
                             channel.send(reply, context)
 
@@ -198,5 +212,3 @@ class BotChoice(Plugin):
                     return plugin_conf
         except Exception as e:
             logger.exception(e) 
-
-
