@@ -1,3 +1,6 @@
+@plugins.register(
+# encoding:utf-8
+
 import requests
 import json
 import plugins
@@ -5,6 +8,7 @@ from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
 import datetime
+
 from plugins import *
 
 @plugins.register(
@@ -12,17 +16,18 @@ from plugins import *
     desire_priority=88,
     hidden=False,
     desc="根据不同关键词调用对应任务型model或bot",
-    version="0.0.2",
+    version="0.0.1",
     author="KevinZhang",
 )
 class BotChoice(Plugin):
 
     bot_list = [
-        {"url": "http://10.75.190.8:2029", "model": "搜图片", "keyword": "搜图片"},
-        {"url": "http://10.75.190.8:2029", "keyword": "视频文案"},
-        {"url": "https://api.pearktrue.cn/api/random/xjj/", "keyword": "/随机小姐姐"}  # 新增的接口
+        {"url":"http://10.75.190.8:2029","model":"搜图片", "keyword":"/搜图片"},
+        {"url":"http://10.75.190.8:2029","keyword":"视频文案"},
+        {"url":"https://api.pearktrue.cn/api/random/xjj/", "keyword":"/sjxjj"}  # 新增接口信息
     ]
     max_words = 8000
+
 
     def __init__(self):
         super().__init__()
@@ -32,17 +37,19 @@ class BotChoice(Plugin):
                 self.config = self._load_config_template()
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
-            self.short_help_text = self.config.get("short_help_text", '发送特定指令以调度不同任务的bot！')
-            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！\n🎉 娱乐与资讯：\n🌅 搜图: 发送“/搜图片 xxx”搜索你想要的图片。\n🐟 视频文案: 发送“/视频文案 链接地址”解析视频文案。\n🔥 文章: 发送“/文章 话题”生成爆款文案。\n🎥 随机小姐姐: 发送“/随机小姐姐”获取随机小姐姐视频。\n")
+            self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
+            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！\n🎉 娱乐与资讯：\n🌅 搜图: 发送“/搜图片 xxx”搜索你想要的图片。\n🐟 视频文案: 发送“/视频文案 链接地址”解析视频文案。\n🔥 /sjxjj: 获取随机搞笑视频。\n")
             logger.info(f"[BotChoice] inited, config={self.config}")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
             logger.error(f"[BotChoice] 初始化异常：{e}")
             raise "[BotChoice] init failed, ignore "
 
+
     def get_help_text(self, verbose=False, **kwargs):
         if not verbose:
             return self.short_help_text
+
         return self.long_help_text
 
     def on_handle_context(self, e_context: EventContext, retry_count: int = 0):
@@ -61,10 +68,10 @@ class BotChoice(Plugin):
                 break
         if is_return:
             return
-
+            
         try:
             context = e_context["context"]
-            msg: ChatMessage = context["msg"]
+            msg:ChatMessage = context["msg"]
             content = context.content
             if context.type != ContextType.TEXT:
                 return
@@ -78,24 +85,31 @@ class BotChoice(Plugin):
             content_new = content
             for bot in self.bot_list:
                 if bot["keyword"] in content:
-                    if bot["keyword"] == "/随机小姐姐":
-                        self._handle_xjj_video(e_context, bot["url"])
-                        e_context.action = EventAction.BREAK_PASS
-                        return
-                        
                     url = bot["url"]
-                    model = bot.get("model")
-                    key = bot.get("key")
+                    model = bot.get("model")  # 获取 model，如果没有则为 None
+                    key = bot.get("key")  # 获取 key，如果没有则为 None
 
                     # 多个指令时 全部处理掉
                     for keywords in self.bot_list:
                         content_new = content_new.replace(keywords["keyword"], "")
 
-                    if bot["keyword"] == "/随机小姐姐":
-                        self._handle_xjj_video(e_context, url)
-                        e_context.action = EventAction.BREAK_PASS
-                        return
-                    else:
+                    # 如果是调用接口获取视频
+                    if bot["keyword"] == "/sjxjj":
+                        response = requests.get(url + "?type=json")
+                        response.raise_for_status()
+                        result = response.json()
+                        video_url = result.get("video")
+                        if video_url:
+                            reply = Reply(ReplyType.VIDEO_URL, video_url)
+                            channel = e_context["channel"]
+                            channel.send(reply, context)
+                        else:
+                            reply = Reply(ReplyType.TEXT, "获取视频失败，请稍后再试")
+                            channel = e_context["channel"]
+                            channel.send(reply, context)
+
+                    # 如果是调用 OpenAI 模型
+                    elif model and key: 
                         openai_chat_url = url + "/chat/completions"
                         openai_headers = self._get_openai_headers(key)
                         openai_payload = self._get_openai_payload(content_new, model)
@@ -137,27 +151,6 @@ class BotChoice(Plugin):
             e_context["reply"] = reply
             e_context.action = EventAction.BREAK_PASS
 
-    def _handle_xjj_video(self, e_context: EventContext, url: str):
-        try:
-            response = requests.get(url, params={"type": "json"})
-            response.raise_for_status()
-            result = response.json()
-
-            if result["code"] == 200:
-                video_url = result["video"]
-                reply = Reply(ReplyType.VIDEO_URL, video_url)
-                channel = e_context["channel"]
-                channel.send(reply, e_context["context"])
-            else:
-                reply = Reply(ReplyType.ERROR, "获取视频失败，请稍后再试")
-                channel = e_context["channel"]
-                channel.send(reply, e_context["context"])
-        except Exception as e:
-            logger.exception(f"[BotChoice] 获取随机小姐姐视频失败: {str(e)}")
-            reply = Reply(ReplyType.ERROR, "获取视频失败，请稍后再试")
-            channel = e_context["channel"]
-            channel.send(reply, e_context["context"])
-
     def _get_openai_headers(self, open_ai_api_key):
         return {
             'Authorization': f"Bearer {open_ai_api_key}",
@@ -166,7 +159,7 @@ class BotChoice(Plugin):
 
     def _get_content(self, content):
         imgs = ("jpg", "jpeg", "png", "gif", "img")
-        videos = ("mp4", "avi", "mov", "pdf")
+        videos= ("mp4", "avi", "mov", "pdf")
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
         # 判断消息类型
         if content.startswith(("http://", "https://")):
@@ -183,7 +176,7 @@ class BotChoice(Plugin):
         return media_type
 
     def _get_openai_payload(self, target_url_content, model):
-        target_url_content = target_url_content[:self.max_words]  # 通过字符串长度简单进行截断
+        target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
         messages = [{"role": "user", "content": target_url_content}]
         payload = {
             'model': model,
@@ -191,7 +184,8 @@ class BotChoice(Plugin):
         }
         return payload
 
-    def contains_str(self, content, strs):
+
+    def contains_str(self, content,strs):
         for s in strs:
             if s in content:
                 return True
@@ -206,5 +200,6 @@ class BotChoice(Plugin):
                     plugin_conf = json.load(f)
                     return plugin_conf
         except Exception as e:
-            logger.exception(e)
+            logger.exception(e) 
+
 
