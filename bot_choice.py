@@ -1,14 +1,14 @@
-import re
 import requests
 import json
 import plugins
+import re  # 新增导入
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
 import datetime
+import os  # 新增导入
 
 from plugins import *
-
 @plugins.register(
     name="BotChoice",
     desire_priority=88,
@@ -136,16 +136,25 @@ class BotChoice(Plugin):
                         try:
                             result = json.loads(result)
                         except:
-                            result = [result]  # 如果无法解析为 JSON，将其放入列表中
+                            pass
 
-                        for value in result:
-                            url_type = self._get_content_type(value)
-                            if url_type == ReplyType.IMAGE_URL or url_type == ReplyType.VIDEO_URL:
-                                reply = Reply(url_type, value)
+                        if isinstance(result, list):
+                            for value in result:
+                                reply = Reply(self._get_content(value), value)
+                                channel = e_context["channel"]
+                                channel.send(reply, context)
+                        if isinstance(result, str):
+                            # 正则提取内容中的图片和视频链接
+                            media_urls = self.extract_media_urls(result)
+                            if media_urls:
+                                for media_url in media_urls:
+                                    reply = Reply(self._get_content(media_url), media_url)
+                                    channel = e_context["channel"]
+                                    channel.send(reply, context)
                             else:
-                                reply = Reply(ReplyType.TEXT, value)
-                            channel = e_context["channel"]
-                            channel.send(reply, context)
+                                reply = Reply(ReplyType.TEXT, result)
+                                channel = e_context["channel"]
+                                channel.send(reply, context)
 
             e_context.action = EventAction.BREAK_PASS
             return
@@ -167,28 +176,23 @@ class BotChoice(Plugin):
             "Content-Type": "application/json"
         }
 
-    def _get_content_type(self, content):
-        # 使用正则表达式提取 URL
-        url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
-        urls = url_pattern.findall(content)
-        
-        if not urls:
-            return ReplyType.TEXT  # 如果没有找到 URL，返回 TEXT 类型
-        
-        # 如果找到了 URL，判断其类型
-        url = urls[0]
+    def _get_content(self, content):
         imgs = ("jpg", "jpeg", "png", "gif", "img")
-        videos = ("mp4", "avi", "mov", "pdf")
+        videos= ("mp4", "avi", "mov", "pdf")
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
-        
-        if url.lower().endswith(imgs):
-            return ReplyType.IMAGE_URL
-        elif url.lower().endswith(videos):
-            return ReplyType.VIDEO_URL
-        elif url.lower().endswith(files):
-            return ReplyType.FILE_URL
+        # 判断消息类型
+        if content.startswith(("http://", "https://")):
+            if content.lower().endswith(imgs) or self.contains_str(content, imgs):
+                media_type = ReplyType.IMAGE_URL
+            elif content.lower().endswith(videos) or self.contains_str(content, videos):
+                media_type = ReplyType.VIDEO_URL
+            elif content.lower().endswith(files) or self.contains_str(content, files):
+                media_type = ReplyType.FILE_URL
+            else:
+                logger.error("不支持的文件类型")
         else:
-            return ReplyType.TEXT  # 如果不支持的文件类型，返回 TEXT 类型
+            media_type = ReplyType.TEXT
+        return media_type
 
     def _get_openai_payload(self, target_url_content, model):
         target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
@@ -199,6 +203,12 @@ class BotChoice(Plugin):
         }
         return payload
 
+    def contains_str(self, content, strs):
+        for s in strs:
+            if s in content:
+                return True
+        return False
+
     def _load_config_template(self):
         logger.debug("No Suno plugin config.json, use plugins/bot_choice/config.json.template")
         try:
@@ -208,4 +218,10 @@ class BotChoice(Plugin):
                     plugin_conf = json.load(f)
                     return plugin_conf
         except Exception as e:
-            logger.exception(e)
+            logger.exception(e) 
+
+    def extract_media_urls(self, content):
+        # 使用正则表达式提取 markdown 格式中的图片和视频链接
+        media_urls = re.findall(r'!\[.*?\]\((.*?)\)|\[(.*?)\]\((.*?)\)', content)
+        urls = [url for _, _, url in media_urls if url]
+        return urls
