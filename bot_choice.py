@@ -136,15 +136,14 @@ class BotChoice(Plugin):
                         try:
                             result = json.loads(result)
                         except:
-                            pass
+                            result = [result]  # 如果无法解析为 JSON，将其放入列表中
 
-                        if isinstance(result, list):
-                            for value in result:
-                                reply = Reply(self._get_content_type(value), value)
-                                channel = e_context["channel"]
-                                channel.send(reply, context)
-                        if isinstance(result, str):
-                            reply = Reply(self._get_content_type(result), result)
+                        for value in result:
+                            url_type = self._get_content_type(value)
+                            if url_type == ReplyType.IMAGE_URL or url_type == ReplyType.VIDEO_URL:
+                                reply = Reply(url_type, value)
+                            else:
+                                reply = Reply(ReplyType.TEXT, value)
                             channel = e_context["channel"]
                             channel.send(reply, context)
 
