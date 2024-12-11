@@ -1,5 +1,6 @@
 import requests
 import json
+import re
 import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
@@ -96,12 +97,9 @@ class BotChoice(Plugin):
                         result = response.json()
                         video_url = result.get("video")
                         if video_url:
-                            reply = Reply(self._get_content(video_url), video_url)
-                            channel = e_context["channel"]
-                            channel.send(reply, context)
+                            self._send_media_reply(channel, context, video_url, ReplyType.VIDEO_URL)
                         else:
                             reply = Reply(ReplyType.TEXT, "获取视频失败，请稍后再试")
-                            channel = e_context["channel"]
                             channel.send(reply, context)
                     # 如果是调用接口获取图片
                     elif bot["keyword"] == "/sjtp":
@@ -110,12 +108,9 @@ class BotChoice(Plugin):
                         result = response.json()
                         image_url = result.get("data")
                         if image_url:
-                            reply = Reply(self._get_content(image_url), image_url)
-                            channel = e_context["channel"]
-                            channel.send(reply, context)
+                            self._send_media_reply(channel, context, image_url, ReplyType.IMAGE_URL)
                         else:
                             reply = Reply(ReplyType.TEXT, "获取图片失败，请稍后再试")
-                            channel = e_context["channel"]
                             channel.send(reply, context)
 
                     # 如果是调用 OpenAI 模型
@@ -139,14 +134,19 @@ class BotChoice(Plugin):
 
                         if isinstance(result, list):
                             for value in result:
-                                reply = Reply(self._get_content(value), value)
-                                channel = e_context["channel"]
+                                media_urls = self.extract_media_urls(value)
+                                for media_url in media_urls:
+                                    self._send_media_reply(channel, context, media_url, self._get_content(media_url))
+                            if not media_urls:
+                                reply = Reply(ReplyType.TEXT, value)
                                 channel.send(reply, context)
                         if isinstance(result, str):
-                            media_type = self._get_content(result)
-                            reply = Reply(media_type, result)
-                            channel = e_context["channel"]
-                            channel.send(reply, context)
+                            media_urls = self.extract_media_urls(result)
+                            for media_url in media_urls:
+                                self._send_media_reply(channel, context, media_url, self._get_content(media_url))
+                            if not media_urls:
+                                reply = Reply(ReplyType.TEXT, result)
+                                channel.send(reply, context)
 
             e_context.action = EventAction.BREAK_PASS
             return
@@ -174,15 +174,25 @@ class BotChoice(Plugin):
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
         # 判断消息类型
         if content.startswith(("http://", "https://")):
-            if content.lower().endswith(imgs) or self.contains_str(content, imgs):
+            if content.lower().endswith(imgs) or self.contains_str(content.lower(), imgs):
                 return ReplyType.IMAGE_URL
-            elif content.lower().endswith(videos) or self.contains_str(content, videos):
+            elif content.lower().endswith(videos) or self.contains_str(content.lower(), videos):
                 return ReplyType.VIDEO_URL
-            elif content.lower().endswith(files) or self.contains_str(content, files):
+            elif content.lower().endswith(files) or self.contains_str(content.lower(), files):
                 return ReplyType.FILE_URL
             else:
                 logger.error("不支持的文件类型")
         return ReplyType.TEXT
+
+    def extract_media_urls(self, text):
+        url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+        urls = url_pattern.findall(text)
+        media_urls = [url for url in urls if self._get_content(url) in [ReplyType.IMAGE_URL, ReplyType.VIDEO_URL]]
+        return media_urls
+
+    def _send_media_reply(self, channel, context, media_url, media_type):
+        reply = Reply(media_type, media_url)
+        channel.send(reply, context)
 
     def _get_openai_payload(self, target_url_content, model):
         target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
@@ -192,7 +202,6 @@ class BotChoice(Plugin):
             'messages': messages
         }
         return payload
-
 
     def contains_str(self, content, strs):
         for s in strs:
