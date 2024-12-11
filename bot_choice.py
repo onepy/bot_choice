@@ -5,6 +5,7 @@ from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
 import datetime
+import os
 
 from plugins import *
 @plugins.register(
@@ -18,8 +19,6 @@ from plugins import *
 class BotChoice(Plugin):
 
     bot_list = [
-        {"url":"http://10.75.190.8:2029","model":"搜图片", "keyword":"/搜图片"},
-        {"url":"http://10.75.190.8:2029","keyword":"视频文案"},
         {"url":"https://api.pearktrue.cn/api/random/xjj/", "keyword":"/sjxjj"},
         {"url": "https://api.mossia.top/randPic/pixiv", "keyword": "/sjtp"}
     ]
@@ -140,13 +139,9 @@ class BotChoice(Plugin):
 
                         if isinstance(result, list):
                             for value in result:
-                                reply = Reply(self._get_content(value), value)
-                                channel = e_context["channel"]
-                                channel.send(reply, context)
+                                self._handle_response_content(value, e_context)
                         if isinstance(result, str):
-                            reply = Reply(ReplyType.TEXT, result)
-                            channel = e_context["channel"]
-                            channel.send(reply, context)
+                            self._handle_response_content(result, e_context)
 
             e_context.action = EventAction.BREAK_PASS
             return
@@ -162,6 +157,21 @@ class BotChoice(Plugin):
             e_context["reply"] = reply
             e_context.action = EventAction.BREAK_PASS
 
+    def _handle_response_content(self, content, e_context):
+        media_type = self._get_content(content)
+        if media_type == ReplyType.IMAGE_URL:
+            reply = Reply(media_type, content)
+            channel = e_context["channel"]
+            channel.send(reply, e_context["context"])
+        elif media_type == ReplyType.VIDEO_URL:
+            reply = Reply(media_type, content)
+            channel = e_context["channel"]
+            channel.send(reply, e_context["context"])
+        else:
+            reply = Reply(ReplyType.TEXT, content)
+            channel = e_context["channel"]
+            channel.send(reply, e_context["context"])
+
     def _get_openai_headers(self, open_ai_api_key):
         return {
             'Authorization': f"Bearer {open_ai_api_key}",
@@ -170,7 +180,7 @@ class BotChoice(Plugin):
 
     def _get_content(self, content):
         imgs = ("jpg", "jpeg", "png", "gif", "img")
-        videos= ("mp4", "avi", "mov", "pdf")
+        videos = ("mp4", "wmv", "avi", "mov", "pdf")
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
         # 判断消息类型
         if content.startswith(("http://", "https://")):
@@ -182,6 +192,7 @@ class BotChoice(Plugin):
                 media_type = ReplyType.FILE_URL
             else:
                 logger.error("不支持的文件类型")
+                media_type = ReplyType.TEXT
         else:
             media_type = ReplyType.TEXT
         return media_type
@@ -211,4 +222,4 @@ class BotChoice(Plugin):
                     plugin_conf = json.load(f)
                     return plugin_conf
         except Exception as e:
-            logger.exception(e) 
+            logger.exception(e)
