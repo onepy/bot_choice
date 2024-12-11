@@ -21,7 +21,7 @@ from plugins import *
 class BotChoice(Plugin):
 
     bot_list = [
-        {"url":"https://api.pearktrue.cn/api/random/xjj/", "keyword":"/sjxjj"},
+        {"url": "https://api.pearktrue.cn/api/random/xjj/", "keyword": "/sjxjj"},
         {"url": "https://api.mossia.top/randPic/pixiv", "keyword": "/sjtp"}
     ]
     max_words = 8000
@@ -34,7 +34,7 @@ class BotChoice(Plugin):
                 self.config = self._load_config_template()
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
-            self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
+            self.short_help_text = self.config.get("short_help_text", '发送特定指令以调度不同任务的bot！')
             self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！/GPT/星火/随机模型等🔥 /sjxjj: 获取随机搞笑视频。\n🖼️ /sjtp: 获取随机图片。\n")  # 更新帮助信息
             logger.info(f"[BotChoice] inited, config={self.config}")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
@@ -179,7 +179,7 @@ class BotChoice(Plugin):
 
     def _get_content(self, content):
         imgs = ("jpg", "jpeg", "png", "gif", "img")
-        videos= ("mp4", "avi", "mov", "pdf")
+        videos = ("mp4", "avi", "mov", "pdf")
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
         # 判断消息类型
         if content.startswith(("http://", "https://")):
@@ -196,7 +196,7 @@ class BotChoice(Plugin):
             return ReplyType.TEXT
 
     def _get_openai_payload(self, target_url_content, model):
-        target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
+        target_url_content = target_url_content[:self.max_words]  # 通过字符串长度简单进行截断
         messages = [{"role": "user", "content": target_url_content}]
         payload = {
             'model': model,
