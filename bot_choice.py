@@ -138,6 +138,8 @@ class BotChoice(Plugin):
                         except:
                             pass
 
+                        logger.debug(f"[BotChoice] OpenAI Response: {result}")
+
                         if isinstance(result, list):
                             for value in result:
                                 reply = self._handle_response(value, context, channel)
@@ -185,12 +187,47 @@ class BotChoice(Plugin):
         return media_type
 
     def _handle_response(self, response_content, context, channel):
+        logger.debug(f"[BotChoice] Handling response content: {response_content}")
         urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', response_content)
         if urls:
             for url in urls:
-                reply = Reply(self._get_content(url), url)
-                return reply
+                logger.debug(f"[BotChoice] Found URL: {url}")
+                reply = self._handle_url(url, context, channel)
+                if reply:
+                    return reply
         return Reply(ReplyType.TEXT, response_content)
+
+    def _handle_url(self, url, context, channel):
+        logger.debug(f"[BotChoice] Handling URL: {url}")
+        media_type = self._get_content(url)
+        if media_type == ReplyType.IMAGE_URL:
+            logger.debug(f"[BotChoice] Downloading image from URL: {url}")
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+            if response.headers.get('content-type').startswith('image'):
+                file_size = len(response.content)
+                logger.debug(f"[BotChoice] Downloaded image size: {file_size} bytes")
+                if file_size < 1000:
+                    logger.error(f"[BotChoice] Image size is too small: {file_size} bytes, URL: {url}")
+                    return None
+                reply = Reply(media_type, url)
+                return reply
+            else:
+                logger.error(f"[BotChoice] Expected image but got content type: {response.headers.get('content-type')}, URL: {url}")
+                return None
+        elif media_type == ReplyType.VIDEO_URL:
+            logger.debug(f"[BotChoice] Handling video URL: {url}")
+            response = requests.get(url, stream=True)
+            response.raise_for_status()
+            if response.headers.get('content-type').startswith('video'):
+                reply = Reply(media_type, url)
+                return reply
+            else:
+                logger.error(f"[BotChoice] Expected video but got content type: {response.headers.get('content-type')}, URL: {url}")
+                return None
+        else:
+            logger.debug(f"[BotChoice] Unsupported media type: {media_type}, URL: {url}")
+            return None
 
     def _get_openai_payload(self, target_url_content, model):
         target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
