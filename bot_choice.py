@@ -67,6 +67,7 @@ class BotChoice(Plugin):
             return
             
         try:
+            channel = e_context["channel"]  # 初始化 channel 变量
             context = e_context["context"]
             msg:ChatMessage = context["msg"]
             content = context.content
@@ -76,7 +77,6 @@ class BotChoice(Plugin):
             if retry_count == 0:
                 logger.debug("[BotChoice] on_handle_context. content: %s" % content)
                 reply = Reply(ReplyType.TEXT, "🎉正在执行，请稍候...")
-                channel = e_context["channel"]
                 channel.send(reply, context)
 
             content_new = content
@@ -98,11 +98,9 @@ class BotChoice(Plugin):
                         video_url = result.get("video")
                         if video_url:
                             reply = Reply(ReplyType.VIDEO_URL, video_url)
-                            channel = e_context["channel"]
                             channel.send(reply, context)
                         else:
                             reply = Reply(ReplyType.TEXT, "获取视频失败，请稍后再试")
-                            channel = e_context["channel"]
                             channel.send(reply, context)
                     # 如果是调用接口获取图片
                     elif bot["keyword"] == "/sjtp":
@@ -112,11 +110,9 @@ class BotChoice(Plugin):
                         image_url = result.get("data")
                         if image_url:
                             reply = Reply(ReplyType.IMAGE_URL, image_url)
-                            channel = e_context["channel"]
                             channel.send(reply, context)
                         else:
                             reply = Reply(ReplyType.TEXT, "获取图片失败，请稍后再试")
-                            channel = e_context["channel"]
                             channel.send(reply, context)
 
                     # 如果是调用 OpenAI 模型
@@ -143,10 +139,12 @@ class BotChoice(Plugin):
                         if isinstance(result, list):
                             for value in result:
                                 reply = self._handle_response(value, context, channel)
-                                channel.send(reply, context)
+                                if reply:
+                                    channel.send(reply, context)
                         if isinstance(result, str):
                             reply = self._handle_response(result, context, channel)
-                            channel.send(reply, context)
+                            if reply:
+                                channel.send(reply, context)
 
             e_context.action = EventAction.BREAK_PASS
             return
@@ -195,15 +193,19 @@ class BotChoice(Plugin):
                 reply = self._handle_url(url, context, channel)
                 if reply:
                     return reply
-        return Reply(ReplyType.TEXT, response_content)
+        return None
 
     def _handle_url(self, url, context, channel):
         logger.debug(f"[BotChoice] Handling URL: {url}")
         media_type = self._get_content(url)
         if media_type == ReplyType.IMAGE_URL:
             logger.debug(f"[BotChoice] Downloading image from URL: {url}")
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
+            try:
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                logger.error(f"[BotChoice] Error downloading image from URL {url}: {str(e)}")
+                return None
             if response.headers.get('content-type').startswith('image'):
                 file_size = len(response.content)
                 logger.debug(f"[BotChoice] Downloaded image size: {file_size} bytes")
@@ -217,8 +219,12 @@ class BotChoice(Plugin):
                 return None
         elif media_type == ReplyType.VIDEO_URL:
             logger.debug(f"[BotChoice] Handling video URL: {url}")
-            response = requests.get(url, stream=True)
-            response.raise_for_status()
+            try:
+                response = requests.get(url, stream=True)
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                logger.error(f"[BotChoice] Error downloading video from URL {url}: {str(e)}")
+                return None
             if response.headers.get('content-type').startswith('video'):
                 reply = Reply(media_type, url)
                 return reply
@@ -239,7 +245,7 @@ class BotChoice(Plugin):
         return payload
 
 
-    def contains_str(self, content,strs):
+    def contains_str(self, content, strs):
         for s in strs:
             if s in content:
                 return True
