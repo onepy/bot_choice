@@ -9,6 +9,7 @@ import datetime
 import os  # 新增导入
 
 from plugins import *
+
 @plugins.register(
     name="BotChoice",
     desire_priority=88,
@@ -25,7 +26,6 @@ class BotChoice(Plugin):
     ]
     max_words = 8000
 
-
     def __init__(self):
         super().__init__()
         try:
@@ -41,7 +41,6 @@ class BotChoice(Plugin):
         except Exception as e:
             logger.error(f"[BotChoice] 初始化异常：{e}")
             raise "[BotChoice] init failed, ignore "
-
 
     def get_help_text(self, verbose=False, **kwargs):
         if not verbose:
@@ -65,10 +64,10 @@ class BotChoice(Plugin):
                 break
         if is_return:
             return
-            
+
         try:
             context = e_context["context"]
-            msg:ChatMessage = context["msg"]
+            msg: ChatMessage = context["msg"]
             content = context.content
             if context.type != ContextType.TEXT:
                 return
@@ -148,7 +147,9 @@ class BotChoice(Plugin):
                             media_urls = self.extract_media_urls(result)
                             if media_urls:
                                 for media_url in media_urls:
-                                    reply = Reply(self._get_content(media_url), media_url)
+                                    media_type = self._get_content(media_url)
+                                    logger.debug(f"[BotChoice] Sending media URL: {media_url}, media_type: {media_type}")
+                                    reply = Reply(media_type, media_url)
                                     channel = e_context["channel"]
                                     channel.send(reply, context)
                             else:
@@ -182,17 +183,17 @@ class BotChoice(Plugin):
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
         # 判断消息类型
         if content.startswith(("http://", "https://")):
-            if content.lower().endswith(imgs) or self.contains_str(content, imgs):
-                media_type = ReplyType.IMAGE_URL
-            elif content.lower().endswith(videos) or self.contains_str(content, videos):
-                media_type = ReplyType.VIDEO_URL
-            elif content.lower().endswith(files) or self.contains_str(content, files):
-                media_type = ReplyType.FILE_URL
+            if content.lower().endswith(imgs) or self.contains_str(content.lower(), imgs):
+                return ReplyType.IMAGE_URL
+            elif content.lower().endswith(videos) or self.contains_str(content.lower(), videos):
+                return ReplyType.VIDEO_URL
+            elif content.lower().endswith(files) or self.contains_str(content.lower(), files):
+                return ReplyType.FILE_URL
             else:
                 logger.error("不支持的文件类型")
+                return ReplyType.TEXT
         else:
-            media_type = ReplyType.TEXT
-        return media_type
+            return ReplyType.TEXT
 
     def _get_openai_payload(self, target_url_content, model):
         target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
@@ -218,7 +219,7 @@ class BotChoice(Plugin):
                     plugin_conf = json.load(f)
                     return plugin_conf
         except Exception as e:
-            logger.exception(e) 
+            logger.exception(e)
 
     def extract_media_urls(self, content):
         # 使用正则表达式提取 markdown 格式中的图片和视频链接
