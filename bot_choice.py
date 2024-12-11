@@ -1,15 +1,14 @@
 import requests
 import json
+import re
 import plugins
-import re  # 新增导入
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
 import datetime
-import os  # 新增导入
+import os
 
 from plugins import *
-
 @plugins.register(
     name="BotChoice",
     desire_priority=88,
@@ -21,10 +20,11 @@ from plugins import *
 class BotChoice(Plugin):
 
     bot_list = [
-        {"url": "https://api.pearktrue.cn/api/random/xjj/", "keyword": "/sjxjj"},
+        {"url":"https://api.pearktrue.cn/api/random/xjj/", "keyword":"/sjxjj"},
         {"url": "https://api.mossia.top/randPic/pixiv", "keyword": "/sjtp"}
     ]
     max_words = 8000
+
 
     def __init__(self):
         super().__init__()
@@ -34,13 +34,14 @@ class BotChoice(Plugin):
                 self.config = self._load_config_template()
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
-            self.short_help_text = self.config.get("short_help_text", '发送特定指令以调度不同任务的bot！')
+            self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
             self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！/GPT/星火/随机模型等🔥 /sjxjj: 获取随机搞笑视频。\n🖼️ /sjtp: 获取随机图片。\n")  # 更新帮助信息
             logger.info(f"[BotChoice] inited, config={self.config}")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
             logger.error(f"[BotChoice] 初始化异常：{e}")
             raise "[BotChoice] init failed, ignore "
+
 
     def get_help_text(self, verbose=False, **kwargs):
         if not verbose:
@@ -64,10 +65,10 @@ class BotChoice(Plugin):
                 break
         if is_return:
             return
-
+            
         try:
             context = e_context["context"]
-            msg: ChatMessage = context["msg"]
+            msg:ChatMessage = context["msg"]
             content = context.content
             if context.type != ContextType.TEXT:
                 return
@@ -139,23 +140,11 @@ class BotChoice(Plugin):
 
                         if isinstance(result, list):
                             for value in result:
-                                reply = Reply(self._get_content(value), value)
-                                channel = e_context["channel"]
+                                reply = self._handle_response(value, context, channel)
                                 channel.send(reply, context)
                         if isinstance(result, str):
-                            # 正则提取内容中的图片和视频链接
-                            media_urls = self.extract_media_urls(result)
-                            if media_urls:
-                                for media_url in media_urls:
-                                    media_type = self._get_content(media_url)
-                                    logger.debug(f"[BotChoice] Sending media URL: {media_url}, media_type: {media_type}")
-                                    reply = Reply(media_type, media_url)
-                                    channel = e_context["channel"]
-                                    channel.send(reply, context)
-                            else:
-                                reply = Reply(ReplyType.TEXT, result)
-                                channel = e_context["channel"]
-                                channel.send(reply, context)
+                            reply = self._handle_response(result, context, channel)
+                            channel.send(reply, context)
 
             e_context.action = EventAction.BREAK_PASS
             return
@@ -179,24 +168,32 @@ class BotChoice(Plugin):
 
     def _get_content(self, content):
         imgs = ("jpg", "jpeg", "png", "gif", "img")
-        videos = ("mp4", "avi", "mov", "pdf")
+        videos= ("mp4", "avi", "mov", "pdf")
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
         # 判断消息类型
         if content.startswith(("http://", "https://")):
-            if content.lower().endswith(imgs) or self.contains_str(content.lower(), imgs):
-                return ReplyType.IMAGE_URL
-            elif content.lower().endswith(videos) or self.contains_str(content.lower(), videos):
-                return ReplyType.VIDEO_URL
-            elif content.lower().endswith(files) or self.contains_str(content.lower(), files):
-                return ReplyType.FILE_URL
+            if content.lower().endswith(imgs) or self.contains_str(content, imgs):
+                media_type = ReplyType.IMAGE_URL
+            elif content.lower().endswith(videos) or self.contains_str(content, videos):
+                media_type = ReplyType.VIDEO_URL
+            elif content.lower().endswith(files) or self.contains_str(content, files):
+                media_type = ReplyType.FILE_URL
             else:
                 logger.error("不支持的文件类型")
-                return ReplyType.TEXT
         else:
-            return ReplyType.TEXT
+            media_type = ReplyType.TEXT
+        return media_type
+
+    def _handle_response(self, response_content, context, channel):
+        urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', response_content)
+        if urls:
+            for url in urls:
+                reply = Reply(self._get_content(url), url)
+                return reply
+        return Reply(ReplyType.TEXT, response_content)
 
     def _get_openai_payload(self, target_url_content, model):
-        target_url_content = target_url_content[:self.max_words]  # 通过字符串长度简单进行截断
+        target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
         messages = [{"role": "user", "content": target_url_content}]
         payload = {
             'model': model,
@@ -204,7 +201,8 @@ class BotChoice(Plugin):
         }
         return payload
 
-    def contains_str(self, content, strs):
+
+    def contains_str(self, content,strs):
         for s in strs:
             if s in content:
                 return True
@@ -220,9 +218,3 @@ class BotChoice(Plugin):
                     return plugin_conf
         except Exception as e:
             logger.exception(e)
-
-    def extract_media_urls(self, content):
-        # 使用正则表达式提取 markdown 格式中的图片和视频链接
-        media_urls = re.findall(r'!\[.*?\]\((.*?)\)|\[(.*?)\]\((.*?)\)', content)
-        urls = [url for _, _, url in media_urls if url]
-        return urls
