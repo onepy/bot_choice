@@ -96,7 +96,7 @@ class BotChoice(Plugin):
                         result = response.json()
                         video_url = result.get("video")
                         if video_url:
-                            reply = Reply(ReplyType.VIDEO_URL, video_url)
+                            reply = Reply(self._get_content(video_url), video_url)
                             channel = e_context["channel"]
                             channel.send(reply, context)
                         else:
@@ -110,7 +110,7 @@ class BotChoice(Plugin):
                         result = response.json()
                         image_url = result.get("data")
                         if image_url:
-                            reply = Reply(ReplyType.IMAGE_URL, image_url)
+                            reply = Reply(self._get_content(image_url), image_url)
                             channel = e_context["channel"]
                             channel.send(reply, context)
                         else:
@@ -139,9 +139,14 @@ class BotChoice(Plugin):
 
                         if isinstance(result, list):
                             for value in result:
-                                self._handle_response_content(value, e_context)
+                                reply = Reply(self._get_content(value), value)
+                                channel = e_context["channel"]
+                                channel.send(reply, context)
                         if isinstance(result, str):
-                            self._handle_response_content(result, e_context)
+                            media_type = self._get_content(result)
+                            reply = Reply(media_type, result)
+                            channel = e_context["channel"]
+                            channel.send(reply, context)
 
             e_context.action = EventAction.BREAK_PASS
             return
@@ -157,21 +162,6 @@ class BotChoice(Plugin):
             e_context["reply"] = reply
             e_context.action = EventAction.BREAK_PASS
 
-    def _handle_response_content(self, content, e_context):
-        media_type = self._get_content(content)
-        if media_type == ReplyType.IMAGE_URL:
-            reply = Reply(media_type, content)
-            channel = e_context["channel"]
-            channel.send(reply, e_context["context"])
-        elif media_type == ReplyType.VIDEO_URL:
-            reply = Reply(media_type, content)
-            channel = e_context["channel"]
-            channel.send(reply, e_context["context"])
-        else:
-            reply = Reply(ReplyType.TEXT, content)
-            channel = e_context["channel"]
-            channel.send(reply, e_context["context"])
-
     def _get_openai_headers(self, open_ai_api_key):
         return {
             'Authorization': f"Bearer {open_ai_api_key}",
@@ -180,22 +170,19 @@ class BotChoice(Plugin):
 
     def _get_content(self, content):
         imgs = ("jpg", "jpeg", "png", "gif", "img")
-        videos = ("mp4", "wmv", "avi", "mov", "pdf")
+        videos = ("mp4", "avi", "mov", "pdf")
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
         # 判断消息类型
         if content.startswith(("http://", "https://")):
             if content.lower().endswith(imgs) or self.contains_str(content, imgs):
-                media_type = ReplyType.IMAGE_URL
+                return ReplyType.IMAGE_URL
             elif content.lower().endswith(videos) or self.contains_str(content, videos):
-                media_type = ReplyType.VIDEO_URL
+                return ReplyType.VIDEO_URL
             elif content.lower().endswith(files) or self.contains_str(content, files):
-                media_type = ReplyType.FILE_URL
+                return ReplyType.FILE_URL
             else:
                 logger.error("不支持的文件类型")
-                media_type = ReplyType.TEXT
-        else:
-            media_type = ReplyType.TEXT
-        return media_type
+        return ReplyType.TEXT
 
     def _get_openai_payload(self, target_url_content, model):
         target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
@@ -207,7 +194,7 @@ class BotChoice(Plugin):
         return payload
 
 
-    def contains_str(self, content,strs):
+    def contains_str(self, content, strs):
         for s in strs:
             if s in content:
                 return True
