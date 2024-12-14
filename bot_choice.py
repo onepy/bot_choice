@@ -1,12 +1,10 @@
 import requests
 import json
-import re
 import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
 import datetime
-import os
 
 from plugins import *
 @plugins.register(
@@ -67,7 +65,6 @@ class BotChoice(Plugin):
             return
             
         try:
-            channel = e_context["channel"]  # 初始化 channel 变量
             context = e_context["context"]
             msg:ChatMessage = context["msg"]
             content = context.content
@@ -77,6 +74,7 @@ class BotChoice(Plugin):
             if retry_count == 0:
                 logger.debug("[BotChoice] on_handle_context. content: %s" % content)
                 reply = Reply(ReplyType.TEXT, "🎉正在执行，请稍候...")
+                channel = e_context["channel"]
                 channel.send(reply, context)
 
             content_new = content
@@ -98,9 +96,11 @@ class BotChoice(Plugin):
                         video_url = result.get("video")
                         if video_url:
                             reply = Reply(ReplyType.VIDEO_URL, video_url)
+                            channel = e_context["channel"]
                             channel.send(reply, context)
                         else:
                             reply = Reply(ReplyType.TEXT, "获取视频失败，请稍后再试")
+                            channel = e_context["channel"]
                             channel.send(reply, context)
                     # 如果是调用接口获取图片
                     elif bot["keyword"] == "/sjtp":
@@ -110,9 +110,11 @@ class BotChoice(Plugin):
                         image_url = result.get("data")
                         if image_url:
                             reply = Reply(ReplyType.IMAGE_URL, image_url)
+                            channel = e_context["channel"]
                             channel.send(reply, context)
                         else:
                             reply = Reply(ReplyType.TEXT, "获取图片失败，请稍后再试")
+                            channel = e_context["channel"]
                             channel.send(reply, context)
 
                     # 如果是调用 OpenAI 模型
@@ -134,17 +136,15 @@ class BotChoice(Plugin):
                         except:
                             pass
 
-                        logger.debug(f"[BotChoice] OpenAI Response: {result}")
-
                         if isinstance(result, list):
                             for value in result:
-                                reply = self._handle_response(value, context, channel)
-                                if reply:
-                                    channel.send(reply, context)
-                        if isinstance(result, str):
-                            reply = self._handle_response(result, context, channel)
-                            if reply:
+                                reply = Reply(self._get_content(value), value)
+                                channel = e_context["channel"]
                                 channel.send(reply, context)
+                        if isinstance(result, str):
+                            reply = Reply(ReplyType.TEXT, result)
+                            channel = e_context["channel"]
+                            channel.send(reply, context)
 
             e_context.action = EventAction.BREAK_PASS
             return
@@ -184,57 +184,6 @@ class BotChoice(Plugin):
             media_type = ReplyType.TEXT
         return media_type
 
-    def _handle_response(self, response_content, context, channel):
-        logger.debug(f"[BotChoice] Handling response content: {response_content}")
-        urls = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', response_content)
-        if urls:
-            for url in urls:
-                logger.debug(f"[BotChoice] Found URL: {url}")
-                reply = self._handle_url(url, context, channel)
-                if reply:
-                    return reply
-        return None
-
-    def _handle_url(self, url, context, channel):
-        logger.debug(f"[BotChoice] Handling URL: {url}")
-        media_type = self._get_content(url)
-        if media_type == ReplyType.IMAGE_URL:
-            logger.debug(f"[BotChoice] Downloading image from URL: {url}")
-            try:
-                response = requests.get(url, stream=True)
-                response.raise_for_status()
-            except requests.exceptions.RequestException as e:
-                logger.error(f"[BotChoice] Error downloading image from URL {url}: {str(e)}")
-                return None
-            if response.headers.get('content-type').startswith('image'):
-                file_size = len(response.content)
-                logger.debug(f"[BotChoice] Downloaded image size: {file_size} bytes")
-                if file_size < 1000:
-                    logger.error(f"[BotChoice] Image size is too small: {file_size} bytes, URL: {url}")
-                    return None
-                reply = Reply(media_type, url)
-                return reply
-            else:
-                logger.error(f"[BotChoice] Expected image but got content type: {response.headers.get('content-type')}, URL: {url}")
-                return None
-        elif media_type == ReplyType.VIDEO_URL:
-            logger.debug(f"[BotChoice] Handling video URL: {url}")
-            try:
-                response = requests.get(url, stream=True)
-                response.raise_for_status()
-            except requests.exceptions.RequestException as e:
-                logger.error(f"[BotChoice] Error downloading video from URL {url}: {str(e)}")
-                return None
-            if response.headers.get('content-type').startswith('video'):
-                reply = Reply(media_type, url)
-                return reply
-            else:
-                logger.error(f"[BotChoice] Expected video but got content type: {response.headers.get('content-type')}, URL: {url}")
-                return None
-        else:
-            logger.debug(f"[BotChoice] Unsupported media type: {media_type}, URL: {url}")
-            return None
-
     def _get_openai_payload(self, target_url_content, model):
         target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
         messages = [{"role": "user", "content": target_url_content}]
@@ -245,7 +194,7 @@ class BotChoice(Plugin):
         return payload
 
 
-    def contains_str(self, content, strs):
+    def contains_str(self, content,strs):
         for s in strs:
             if s in content:
                 return True
@@ -260,4 +209,4 @@ class BotChoice(Plugin):
                     plugin_conf = json.load(f)
                     return plugin_conf
         except Exception as e:
-            logger.exception(e)
+            logger.exception(e) 
