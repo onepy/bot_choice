@@ -37,7 +37,7 @@ class BotChoice(Plugin):
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
             self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
-            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！") 
+            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！")
             logger.info(f"[BotChoice] inited, config={self.config}")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
@@ -76,7 +76,7 @@ class BotChoice(Plugin):
 
             if retry_count == 0:
                 logger.debug("[BotChoice] on_handle_context. content: %s" % content)
-                reply = Reply(ReplyType.TEXT, "🎉请稍候...")
+                reply = Reply(ReplyType.TEXT, "🎉正在执行，请稍候...")
                 channel = e_context["channel"]
                 channel.send(reply, context)
 
@@ -210,50 +210,50 @@ class BotChoice(Plugin):
         except Exception as e:
             logger.exception(e) 
 
-def _send_content(self, content, context, e_context):
-    # 提取链接
-    url_pattern = re.compile(r'https?://\S+\.(?:png|jpg|jpeg|gif|webp|mp4|avi|mov|pdf|doc|docx|xls|xlsx|zip|rar|txt)')
-    urls = url_pattern.findall(content)
+    def _send_content(self, content, context, e_context):
+        # 提取链接
+        url_pattern = re.compile(r'https?://\S+\.(?:png|jpg|jpeg|gif|webp|mp4|avi|mov|pdf|doc|docx|xls|xlsx|zip|rar|txt)')
+        urls = url_pattern.findall(content)
+        
+        if urls:
+            for url in urls:
+                try:
+                    media_type = self._get_content(url)
+                    if media_type == ReplyType.IMAGE_URL:
+                        # 下载图片
+                        headers = {
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
+                        image_response = requests.get(url, headers=headers, stream=True, timeout=10)
+                        image_response.raise_for_status()
+                        image_data = image_response.content
+                        
+                        # 发送图片二进制数据
+                        reply = Reply(ReplyType.IMAGE, image_data)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
 
-    if urls:
-        for url in urls:
-            try:
-                media_type = self._get_content(url)
-                if media_type == ReplyType.IMAGE_URL:
-                    # 下载图片
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-                    image_response = requests.get(url, headers=headers, stream=True, timeout=10)
-                    image_response.raise_for_status()
-                    image_data = image_response.content
+                    elif media_type == ReplyType.VIDEO_URL:
+                        reply = Reply(ReplyType.VIDEO_URL, url)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
                     
-                    # 发送图片二进制数据
-                    reply = Reply(ReplyType.IMAGE, image_data)
-                    channel = e_context["channel"]
-                    channel.send(reply, context)
-
-                elif media_type == ReplyType.VIDEO_URL:
-                    reply = Reply(ReplyType.VIDEO_URL, url)
-                    channel = e_context["channel"]
-                    channel.send(reply, context)
-                
-                elif media_type == ReplyType.FILE_URL:
-                    reply = Reply(ReplyType.FILE_URL, url)
-                    channel = e_context["channel"]
-                    channel.send(reply, context)
-                else:
-                    # 如果不是图片或视频链接，则发送原始文本
+                    elif media_type == ReplyType.FILE_URL:
+                        reply = Reply(ReplyType.FILE_URL, url)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
+                    else:
+                        # 如果不是图片或视频链接，则发送原始文本
+                        reply = Reply(ReplyType.TEXT, content)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
+                except Exception as e:
+                    logger.error(f"发送媒体链接失败：{e}")
+                    # 发送失败时回退到发送原始文本
                     reply = Reply(ReplyType.TEXT, content)
                     channel = e_context["channel"]
                     channel.send(reply, context)
-            except Exception as e:
-                logger.error(f"发送媒体链接失败：{e}")
-                # 发送失败时回退到发送原始文本
-                reply = Reply(ReplyType.TEXT, content)
-                channel = e_context["channel"]
-                channel.send(reply, context)
-    else:
-        # 如果没有找到链接，直接发送文本
-        reply = Reply(ReplyType.TEXT, content)
-        channel = e_context["channel"]
-        channel.send(reply, context)
+        else:
+            # 如果没有找到链接，直接发送文本
+            reply = Reply(ReplyType.TEXT, content)
+            channel = e_context["channel"]
+            channel.send(reply, context)
