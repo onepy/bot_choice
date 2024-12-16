@@ -8,6 +8,7 @@ import datetime
 import os
 import re
 import logging
+import io
 
 from plugins import *
 logger = logging.getLogger(__name__)
@@ -226,9 +227,12 @@ class BotChoice(Plugin):
                         image_response = requests.get(url, headers=headers, stream=True, timeout=10)
                         image_response.raise_for_status()
                         image_data = image_response.content
+
+                        # 将二进制数据包装成类似文件的对象
+                        image_file = io.BytesIO(image_data)
                         
                         # 发送图片二进制数据
-                        reply = Reply(ReplyType.IMAGE, image_data)
+                        reply = Reply(ReplyType.IMAGE, image_file)
                         channel = e_context["channel"]
                         channel.send(reply, context)
 
