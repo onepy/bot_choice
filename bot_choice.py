@@ -6,6 +6,7 @@ from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
 import datetime
 import os
+import re
 import logging
 
 from plugins import *
@@ -65,17 +66,17 @@ class BotChoice(Plugin):
                 break
         if is_return:
             return
-            
+        
         try:
             context = e_context["context"]
-            msg: ChatMessage = context["msg"]
+            msg:ChatMessage = context["msg"]
             content = context.content
             if context.type != ContextType.TEXT:
                 return
 
             if retry_count == 0:
                 logger.debug("[BotChoice] on_handle_context. content: %s" % content)
-                reply = Reply(ReplyType.TEXT, "🎉请稍候...")
+                reply = Reply(ReplyType.TEXT, "🎉正在执行，请稍候...")
                 channel = e_context["channel"]
                 channel.send(reply, context)
 
@@ -133,6 +134,7 @@ class BotChoice(Plugin):
                         response.raise_for_status()
                         result = response.json()['choices'][0]['message']['content']
 
+                        # 处理GPT的响应，提取链接
                         try:
                             result = json.loads(result)
                         except:
@@ -140,32 +142,16 @@ class BotChoice(Plugin):
 
                         if isinstance(result, list):
                             for value in result:
-                                reply_type = self._get_content(value)
-                                reply = Reply(reply_type, value)
-                                try:
-                                    channel = e_context["channel"]
-                                    channel.send(reply, context)
-                                except Exception as e:
-                                    logger.warning(f"转存资源失败: {e}")
-                                    reply = Reply(ReplyType.TEXT, value)
-                                    channel.send(reply, context)
-                        if isinstance(result, str):
-                            reply_type = self._get_content(result)
-                            reply = Reply(reply_type, result)
-                            try:
-                                channel = e_context["channel"]
-                                channel.send(reply, context)
-                            except Exception as e:
-                                logger.warning(f"转存资源失败: {e}")
-                                reply = Reply(ReplyType.TEXT, result)
-                                channel.send(reply, context)
+                                self._send_content(value, context, e_context)
+                        elif isinstance(result, str):
+                            self._send_content(result, context, e_context)
 
             e_context.action = EventAction.BREAK_PASS
             return
 
         except Exception as e:
             if retry_count < 3:
-                logger.warning(f"[JinaSum] {str(e)}, retry {retry_count + 1}")
+                logger.warning(f"[BotChoice] {str(e)}, retry {retry_count + 1}")
                 self.on_handle_context(e_context, retry_count + 1)
                 return
 
@@ -187,17 +173,19 @@ class BotChoice(Plugin):
         # 判断消息类型
         if content.startswith(("http://", "https://")):
             if content.lower().endswith(imgs) or self.contains_str(content, imgs):
-                return ReplyType.IMAGE_URL
+                media_type = ReplyType.IMAGE_URL
             elif content.lower().endswith(videos) or self.contains_str(content, videos):
-                return ReplyType.VIDEO_URL
+                media_type = ReplyType.VIDEO_URL
             elif content.lower().endswith(files) or self.contains_str(content, files):
-                return ReplyType.FILE_URL
+                media_type = ReplyType.FILE_URL
             else:
                 logger.error("不支持的文件类型")
-        return ReplyType.TEXT
+        else:
+            media_type = ReplyType.TEXT
+        return media_type
 
     def _get_openai_payload(self, target_url_content, model):
-        target_url_content = target_url_content[:self.max_words]  # 通过字符串长度简单进行截断
+        target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
         messages = [{"role": "user", "content": target_url_content}]
         payload = {
             'model': model,
@@ -220,4 +208,35 @@ class BotChoice(Plugin):
                     plugin_conf = json.load(f)
                     return plugin_conf
         except Exception as e:
-            logger.exception(e)
+            logger.exception(e) 
+
+    def _send_content(self, content, context, e_context):
+        # 提取链接
+        url_pattern = re.compile(r'https?://\S+')
+        urls = url_pattern.findall(content)
+        
+        if urls:
+            for url in urls:
+                try:
+                    media_type = self._get_content(url)
+                    if media_type != ReplyType.TEXT:
+                        reply = Reply(media_type, url)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
+                    else:
+                        # 如果不是图片或视频链接，则发送原始文本
+                        reply = Reply(ReplyType.TEXT, content)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
+                except Exception as e:
+                    logger.error(f"发送媒体链接失败：{e}")
+                    # 发送失败时回退到发送原始文本
+                    reply = Reply(ReplyType.TEXT, content)
+                    channel = e_context["channel"]
+                    channel.send(reply, context)
+        else:
+            # 如果没有找到链接，直接发送文本
+            reply = Reply(ReplyType.TEXT, content)
+            channel = e_context["channel"]
+            channel.send(reply, context)
+
