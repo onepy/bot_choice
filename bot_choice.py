@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     desire_priority=88,
     hidden=False,
     desc="根据不同关键词调用对应任务型model或bot",
-    version="0.0.5",
+    version="0.0.6",
     author="KevinZhang",
 )
 class BotChoice(Plugin):
@@ -67,7 +67,7 @@ class BotChoice(Plugin):
                 break
         if is_return:
             return
-        
+      
         try:
             context = e_context["context"]
             msg:ChatMessage = context["msg"]
@@ -122,7 +122,7 @@ class BotChoice(Plugin):
                             channel.send(reply, context)
 
                     # 如果是调用 OpenAI 模型
-                    elif model and key: 
+                    elif model and key and bot["keyword"] != "/image": 
                         openai_chat_url = url + "/chat/completions"
                         openai_headers = self._get_openai_headers(key)
                         openai_payload = self._get_openai_payload(content_new, model)
@@ -146,7 +146,24 @@ class BotChoice(Plugin):
                                 self._send_content(value, context, e_context)
                         elif isinstance(result, str):
                             self._send_content(result, context, e_context)
-
+                    elif model and key and bot["keyword"] == "/image":
+                        image_url = url
+                        image_headers = self._get_openai_headers(key)
+                        image_payload = self._get_image_payload(content_new, model)
+                        headers = {
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
+                        logger.debug(
+                            f"[BotChoice] image_url: {image_url}, image_headers: {image_headers}, image_payload: {image_payload}")
+                        response = requests.post(image_url, headers={**image_headers, **headers},
+                                                 json=image_payload, timeout=80)
+                        response.raise_for_status()
+                        result = response.json()
+                        if "images" in result:
+                            for image in result["images"]:
+                                if "url" in image:
+                                    self._send_content(image["url"],context,e_context)
+                        else:
+                            self._send_content(str(result),context,e_context)
             e_context.action = EventAction.BREAK_PASS
             return
 
@@ -193,6 +210,32 @@ class BotChoice(Plugin):
             'messages': messages
         }
         return payload
+    
+    def _get_image_payload(self, content_new, model):
+        parts = content_new.split("&")
+        prompt = parts[0].strip() if len(parts) > 0 else ""
+        batch_size = 1
+        image_size = "1024x1024"
+        for part in parts[1:]:
+            part = part.strip()
+            if "张" in part:
+                try:
+                   batch_size = int(part.replace("张", "").strip())
+                except:
+                   batch_size = 1
+            if ":" in part:
+                image_size = part.strip()
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "image_size": image_size,
+            "batch_size": batch_size,
+            "num_inference_steps": 25,
+            "guidance_scale": 7,
+             "negative_prompt": "bad body",
+             "prompt_enhancement": True
+        }
+        return payload
 
     def contains_str(self, content, strs):
         for s in strs:
@@ -215,7 +258,7 @@ class BotChoice(Plugin):
         # 提取链接
         url_pattern = re.compile(r'https?://\S+\.(?:png|jpg|jpeg|gif|webp|mp4|avi|mov|pdf|doc|docx|xls|xlsx|zip|rar|txt)')
         urls = url_pattern.findall(content)
-        
+      
         if urls:
             for url in urls:
                 try:
@@ -228,7 +271,7 @@ class BotChoice(Plugin):
                         image_response.raise_for_status()
                         image_data = image_response.content
                         image_file = io.BytesIO(image_data)
-                        
+                      
                         # 发送图片二进制数据
                         reply = Reply(ReplyType.IMAGE, image_file)
                         channel = e_context["channel"]
@@ -238,7 +281,7 @@ class BotChoice(Plugin):
                         reply = Reply(ReplyType.VIDEO_URL, url)
                         channel = e_context["channel"]
                         channel.send(reply, context)
-                    
+                  
                     elif media_type == ReplyType.FILE_URL:
                         reply = Reply(ReplyType.FILE_URL, url)
                         channel = e_context["channel"]
