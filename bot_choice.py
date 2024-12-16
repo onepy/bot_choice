@@ -37,6 +37,10 @@ class BotChoice(Plugin):
                 self.config = self._load_config_template()
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
+            self.num_inference_steps = self.config.get("num_inference_steps", self.num_inference_steps)
+            self.guidance_scale = self.config.get("guidance_scale", self.guidance_scale)
+            self.negative_prompt = self.config.get("negative_prompt", self.negative_prompt)
+            self.prompt_enhancement = self.config.get("prompt_enhancement", self.prompt_enhancement)
             self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
             self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！")
             logger.info(f"[BotChoice] inited, config={self.config}")
@@ -230,10 +234,10 @@ class BotChoice(Plugin):
             "prompt": prompt,
             "image_size": image_size,
             "batch_size": batch_size,
-            "num_inference_steps": 25,
-            "guidance_scale": 7,
-             "negative_prompt": "bad body",
-             "prompt_enhancement": True
+            "num_inference_steps": self.num_inference_steps,
+            "guidance_scale": self.guidance_scale,
+            "negative_prompt": self.negative_prompt,
+            "prompt_enhancement": self.prompt_enhancement
         }
         return payload
 
