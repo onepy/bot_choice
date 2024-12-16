@@ -37,9 +37,7 @@ class BotChoice(Plugin):
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
             self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
-            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！/GPT/星火/随机模型等🔥 /sjxjj: 获取随机搞笑视频。
-🖼️ /sjtp: 获取随机图片。
-") 
+            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！") 
             logger.info(f"[BotChoice] inited, config={self.config}")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
@@ -78,7 +76,7 @@ class BotChoice(Plugin):
 
             if retry_count == 0:
                 logger.debug("[BotChoice] on_handle_context. content: %s" % content)
-                reply = Reply(ReplyType.TEXT, "🎉正在执行，请稍候...")
+                reply = Reply(ReplyType.TEXT, "🎉请稍候...")
                 channel = e_context["channel"]
                 channel.send(reply, context)
 
