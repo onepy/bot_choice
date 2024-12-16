@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     desire_priority=88,
     hidden=False,
     desc="根据不同关键词调用对应任务型model或bot",
-    version="0.0.8",
+    version="0.0.9",
     author="KevinZhang",
 )
 class BotChoice(Plugin):
@@ -30,14 +30,14 @@ class BotChoice(Plugin):
     max_words = 8000
     default_image_size = "1024x1024"
     default_num_inference_steps = 25
-    default_guidance_scale = 5.5
+    default_guidance_scale = 7.5
     default_negative_prompt = ""
-    default_prompt_enhancement = false
+    default_prompt_enhancement = True
 
     def __init__(self):
         super().__init__()
         try:
-            self.config = super().load_config()
+            self.config = self.load_config()
             if not self.config:
                 self.config = self._load_config_template()
             self.bot_list = self.config.get("bot_list", self.bot_list)
@@ -53,7 +53,7 @@ class BotChoice(Plugin):
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
             logger.error(f"[BotChoice] 初始化异常：{e}")
-            raise "[BotChoice] init failed, ignore "
+            raise Exception(f"[BotChoice] init failed, ignore {e}")
 
     def get_help_text(self, verbose=False, **kwargs):
         if not verbose:
