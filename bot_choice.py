@@ -37,7 +37,9 @@ class BotChoice(Plugin):
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
             self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
-            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！/GPT/星火/随机模型等🔥 /sjxjj: 获取随机搞笑视频。\n🖼️ /sjtp: 获取随机图片。\n")  # 更新帮助信息
+            self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！/GPT/星火/随机模型等🔥 /sjxjj: 获取随机搞笑视频。
+🖼️ /sjtp: 获取随机图片。
+") 
             logger.info(f"[BotChoice] inited, config={self.config}")
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
@@ -219,8 +221,26 @@ class BotChoice(Plugin):
             for url in urls:
                 try:
                     media_type = self._get_content(url)
-                    if media_type != ReplyType.TEXT:
-                        reply = Reply(media_type, url)
+                    if media_type == ReplyType.IMAGE_URL:
+                        # 下载图片
+                        headers = {
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
+                        image_response = requests.get(url, headers=headers, stream=True, timeout=10)
+                        image_response.raise_for_status()
+                        image_data = image_response.content
+                        
+                        # 发送图片二进制数据
+                        reply = Reply(ReplyType.IMAGE, image_data)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
+
+                    elif media_type == ReplyType.VIDEO_URL:
+                        reply = Reply(ReplyType.VIDEO_URL, url)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
+                    
+                    elif media_type == ReplyType.FILE_URL:
+                        reply = Reply(ReplyType.FILE_URL, url)
                         channel = e_context["channel"]
                         channel.send(reply, context)
                     else:
@@ -239,4 +259,3 @@ class BotChoice(Plugin):
             reply = Reply(ReplyType.TEXT, content)
             channel = e_context["channel"]
             channel.send(reply, context)
-
