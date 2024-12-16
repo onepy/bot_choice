@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     desire_priority=88,
     hidden=False,
     desc="根据不同关键词调用对应任务型model或bot",
-    version="0.0.6",
+    version="0.0.7",
     author="KevinZhang",
 )
 class BotChoice(Plugin):
@@ -28,6 +28,11 @@ class BotChoice(Plugin):
         {"url": "https://api.mossia.top/randPic/pixiv", "keyword": "/sjtp"}
     ]
     max_words = 8000
+    default_image_size = "1024x1024"
+    default_num_inference_steps = 25
+    default_guidance_scale = 7.5
+    default_negative_prompt = ""
+    default_prompt_enhancement = True
 
     def __init__(self):
         super().__init__()
@@ -37,10 +42,11 @@ class BotChoice(Plugin):
                 self.config = self._load_config_template()
             self.bot_list = self.config.get("bot_list", self.bot_list)
             self.max_words = self.config.get("max_words", self.max_words)
-            self.num_inference_steps = self.config.get("num_inference_steps", self.num_inference_steps)
-            self.guidance_scale = self.config.get("guidance_scale", self.guidance_scale)
-            self.negative_prompt = self.config.get("negative_prompt", self.negative_prompt)
-            self.prompt_enhancement = self.config.get("prompt_enhancement", self.prompt_enhancement)
+            self.default_num_inference_steps = self.config.get("num_inference_steps", self.default_num_inference_steps)
+            self.default_guidance_scale = self.config.get("guidance_scale", self.default_guidance_scale)
+            self.default_negative_prompt = self.config.get("negative_prompt", self.default_negative_prompt)
+            self.default_prompt_enhancement = self.config.get("prompt_enhancement", self.default_prompt_enhancement)
+            self.default_image_size = self.config.get("default_image_size", self.default_image_size)
             self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
             self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！")
             logger.info(f"[BotChoice] inited, config={self.config}")
@@ -219,7 +225,9 @@ class BotChoice(Plugin):
         parts = content_new.split("&")
         prompt = parts[0].strip() if len(parts) > 0 else ""
         batch_size = 1
-        image_size = "1024x1024"
+        image_size = self.default_image_size
+        seed = None
+        
         for part in parts[1:]:
             part = part.strip()
             if "张" in part:
@@ -227,18 +235,27 @@ class BotChoice(Plugin):
                    batch_size = int(part.replace("张", "").strip())
                 except:
                    batch_size = 1
-            if ":" in part:
-                image_size = part.strip()
+            elif re.match(r"^\d+x\d+$", part):
+                image_size = part
+            elif re.match(r"^seed:\d+$", part):
+                try:
+                   seed = int(part.split(":")[1])
+                except:
+                   seed = None
+        
         payload = {
             "model": model,
             "prompt": prompt,
             "image_size": image_size,
             "batch_size": batch_size,
-            "num_inference_steps": self.num_inference_steps,
-            "guidance_scale": self.guidance_scale,
-            "negative_prompt": self.negative_prompt,
-            "prompt_enhancement": self.prompt_enhancement
+            "num_inference_steps": self.default_num_inference_steps,
+            "guidance_scale": self.default_guidance_scale,
+            "negative_prompt": self.default_negative_prompt,
+            "prompt_enhancement": self.default_prompt_enhancement,
         }
+        if seed is not None:
+            payload["seed"] = seed
+            
         return payload
 
     def contains_str(self, content, strs):
