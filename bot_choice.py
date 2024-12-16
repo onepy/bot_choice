@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     desire_priority=88,
     hidden=False,
     desc="根据不同关键词调用对应任务型model或bot",
-    version="0.0.7",
+    version="0.0.8",
     author="KevinZhang",
 )
 class BotChoice(Plugin):
@@ -30,9 +30,9 @@ class BotChoice(Plugin):
     max_words = 8000
     default_image_size = "1024x1024"
     default_num_inference_steps = 25
-    default_guidance_scale = 7.5
+    default_guidance_scale = 5.5
     default_negative_prompt = ""
-    default_prompt_enhancement = True
+    default_prompt_enhancement = false
 
     def __init__(self):
         super().__init__()
@@ -168,10 +168,19 @@ class BotChoice(Plugin):
                                                  json=image_payload, timeout=80)
                         response.raise_for_status()
                         result = response.json()
+                        
                         if "images" in result:
                             for image in result["images"]:
                                 if "url" in image:
                                     self._send_content(image["url"],context,e_context)
+                        if "data" in result:
+                           if isinstance(result["data"],list):
+                               for image in result["data"]:
+                                    if "url" in image:
+                                        self._send_content(image["url"],context,e_context)
+                           elif isinstance(result["data"],dict):
+                                if "url" in result["data"]:
+                                    self._send_content(result["data"]["url"],context,e_context)
                         else:
                             self._send_content(str(result),context,e_context)
             e_context.action = EventAction.BREAK_PASS
