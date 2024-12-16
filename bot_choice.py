@@ -5,8 +5,12 @@ from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
 import datetime
+import os
+import logging
 
 from plugins import *
+logger = logging.getLogger(__name__)
+
 @plugins.register(
     name="BotChoice",
     desire_priority=88,
@@ -23,7 +27,6 @@ class BotChoice(Plugin):
     ]
     max_words = 8000
 
-
     def __init__(self):
         super().__init__()
         try:
@@ -39,7 +42,6 @@ class BotChoice(Plugin):
         except Exception as e:
             logger.error(f"[BotChoice] 初始化异常：{e}")
             raise "[BotChoice] init failed, ignore "
-
 
     def get_help_text(self, verbose=False, **kwargs):
         if not verbose:
@@ -66,14 +68,14 @@ class BotChoice(Plugin):
             
         try:
             context = e_context["context"]
-            msg:ChatMessage = context["msg"]
+            msg: ChatMessage = context["msg"]
             content = context.content
             if context.type != ContextType.TEXT:
                 return
 
             if retry_count == 0:
                 logger.debug("[BotChoice] on_handle_context. content: %s" % content)
-                reply = Reply(ReplyType.TEXT, "🎉正在执行，请稍候...")
+                reply = Reply(ReplyType.TEXT, "🎉请稍候...")
                 channel = e_context["channel"]
                 channel.send(reply, context)
 
@@ -138,13 +140,25 @@ class BotChoice(Plugin):
 
                         if isinstance(result, list):
                             for value in result:
-                                reply = Reply(self._get_content(value), value)
+                                reply_type = self._get_content(value)
+                                reply = Reply(reply_type, value)
+                                try:
+                                    channel = e_context["channel"]
+                                    channel.send(reply, context)
+                                except Exception as e:
+                                    logger.warning(f"转存资源失败: {e}")
+                                    reply = Reply(ReplyType.TEXT, value)
+                                    channel.send(reply, context)
+                        if isinstance(result, str):
+                            reply_type = self._get_content(result)
+                            reply = Reply(reply_type, result)
+                            try:
                                 channel = e_context["channel"]
                                 channel.send(reply, context)
-                        if isinstance(result, str):
-                            reply = Reply(ReplyType.TEXT, result)
-                            channel = e_context["channel"]
-                            channel.send(reply, context)
+                            except Exception as e:
+                                logger.warning(f"转存资源失败: {e}")
+                                reply = Reply(ReplyType.TEXT, result)
+                                channel.send(reply, context)
 
             e_context.action = EventAction.BREAK_PASS
             return
@@ -168,24 +182,22 @@ class BotChoice(Plugin):
 
     def _get_content(self, content):
         imgs = ("jpg", "jpeg", "png", "gif", "img")
-        videos= ("mp4", "avi", "mov", "pdf")
+        videos = ("mp4", "avi", "mov", "pdf")
         files = ("doc", "docx", "xls", "xlsx", "zip", "rar", "txt")
         # 判断消息类型
         if content.startswith(("http://", "https://")):
             if content.lower().endswith(imgs) or self.contains_str(content, imgs):
-                media_type = ReplyType.IMAGE_URL
+                return ReplyType.IMAGE_URL
             elif content.lower().endswith(videos) or self.contains_str(content, videos):
-                media_type = ReplyType.VIDEO_URL
+                return ReplyType.VIDEO_URL
             elif content.lower().endswith(files) or self.contains_str(content, files):
-                media_type = ReplyType.FILE_URL
+                return ReplyType.FILE_URL
             else:
                 logger.error("不支持的文件类型")
-        else:
-            media_type = ReplyType.TEXT
-        return media_type
+        return ReplyType.TEXT
 
     def _get_openai_payload(self, target_url_content, model):
-        target_url_content = target_url_content[:self.max_words] # 通过字符串长度简单进行截断
+        target_url_content = target_url_content[:self.max_words]  # 通过字符串长度简单进行截断
         messages = [{"role": "user", "content": target_url_content}]
         payload = {
             'model': model,
@@ -193,8 +205,7 @@ class BotChoice(Plugin):
         }
         return payload
 
-
-    def contains_str(self, content,strs):
+    def contains_str(self, content, strs):
         for s in strs:
             if s in content:
                 return True
@@ -209,4 +220,4 @@ class BotChoice(Plugin):
                     plugin_conf = json.load(f)
                     return plugin_conf
         except Exception as e:
-            logger.exception(e) 
+            logger.exception(e)
