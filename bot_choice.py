@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     desire_priority=88,
     hidden=False,
     desc="根据不同关键词调用对应任务型model或bot",
-    version="0.0.1",
+    version="0.0.5",
     author="KevinZhang",
 )
 class BotChoice(Plugin):
@@ -224,11 +224,9 @@ class BotChoice(Plugin):
                         # 下载图片
                         headers = {
                                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-                        image_response = requests.get(url, headers=headers, stream=True, timeout=10)
+                        image_response = requests.get(url, headers=headers, stream=True, timeout=35)
                         image_response.raise_for_status()
                         image_data = image_response.content
-
-                        # 将二进制数据包装成类似文件的对象
                         image_file = io.BytesIO(image_data)
                         
                         # 发送图片二进制数据
