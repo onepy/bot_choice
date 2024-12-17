@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     desire_priority=88,
     hidden=False,
     desc="根据不同关键词调用对应任务型model或bot",
-    version="0.0.9",
+    version="0.0.8",
     author="KevinZhang",
 )
 class BotChoice(Plugin):
@@ -37,7 +37,7 @@ class BotChoice(Plugin):
     def __init__(self):
         super().__init__()
         try:
-            self.config = self.load_config()
+            self.config = super().load_config()
             if not self.config:
                 self.config = self._load_config_template()
             self.bot_list = self.config.get("bot_list", self.bot_list)
@@ -53,7 +53,7 @@ class BotChoice(Plugin):
             self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         except Exception as e:
             logger.error(f"[BotChoice] 初始化异常：{e}")
-            raise Exception(f"[BotChoice] init failed, ignore {e}")
+            raise "[BotChoice] init failed, ignore "
 
     def get_help_text(self, verbose=False, **kwargs):
         if not verbose:
@@ -168,19 +168,11 @@ class BotChoice(Plugin):
                                                  json=image_payload, timeout=80)
                         response.raise_for_status()
                         result = response.json()
-                        
+                        logger.debug(f"[BotChoice] Image API response: {result}")
                         if "images" in result:
                             for image in result["images"]:
                                 if "url" in image:
                                     self._send_content(image["url"],context,e_context)
-                        if "data" in result:
-                           if isinstance(result["data"],list):
-                               for image in result["data"]:
-                                    if "url" in image:
-                                        self._send_content(image["url"],context,e_context)
-                           elif isinstance(result["data"],dict):
-                                if "url" in result["data"]:
-                                    self._send_content(result["data"]["url"],context,e_context)
                         else:
                             self._send_content(str(result),context,e_context)
             e_context.action = EventAction.BREAK_PASS
@@ -242,15 +234,16 @@ class BotChoice(Plugin):
             if "张" in part:
                 try:
                    batch_size = int(part.replace("张", "").strip())
-                except:
-                   batch_size = 1
+                except ValueError:
+                    logger.warning(f"[BotChoice] Invalid batch_size format: {part}, use default value: {batch_size}")
             elif re.match(r"^\d+x\d+$", part):
                 image_size = part
-            elif re.match(r"^seed:\d+$", part):
-                try:
-                   seed = int(part.split(":")[1])
-                except:
-                   seed = None
+            elif re.match(r"^seed:(\d+)$", part):
+                 try:
+                    seed = int(re.match(r"^seed:(\d+)$", part).group(1))
+                 except ValueError:
+                     logger.warning(f"[BotChoice] Invalid seed format: {part}, seed will not be used")
+                     seed = None
         
         payload = {
             "model": model,
@@ -264,7 +257,7 @@ class BotChoice(Plugin):
         }
         if seed is not None:
             payload["seed"] = seed
-            
+        logger.debug(f"[BotChoice] Image payload: {payload}")    
         return payload
 
     def contains_str(self, content, strs):
