@@ -9,16 +9,18 @@ import os
 import re
 import logging
 import io
+import urllib3
 
 from plugins import *
 logger = logging.getLogger(__name__)
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 @plugins.register(
     name="BotChoice",
     desire_priority=88,
     hidden=False,
     desc="根据不同关键词调用对应任务型model或bot",
-    version="0.0.8",
+    version="0.0.9",
     author="KevinZhang",
 )
 class BotChoice(Plugin):
@@ -33,6 +35,7 @@ class BotChoice(Plugin):
     default_guidance_scale = 7.5
     default_negative_prompt = ""
     default_prompt_enhancement = True
+    image_download_timeout = 60
 
     def __init__(self):
         super().__init__()
@@ -47,6 +50,7 @@ class BotChoice(Plugin):
             self.default_negative_prompt = self.config.get("negative_prompt", self.default_negative_prompt)
             self.default_prompt_enhancement = self.config.get("prompt_enhancement", self.default_prompt_enhancement)
             self.default_image_size = self.config.get("default_image_size", self.default_image_size)
+            self.image_download_timeout = self.config.get("image_download_timeout", self.image_download_timeout)
             self.short_help_text = self.config.get("short_help_text",'发送特定指令以调度不同任务的bot！')
             self.long_help_text = self.config.get("long_help_text", "📚 发送关键词执行任务bot！")
             logger.info(f"[BotChoice] inited, config={self.config}")
@@ -87,7 +91,7 @@ class BotChoice(Plugin):
 
             if retry_count == 0:
                 logger.debug("[BotChoice] on_handle_context. content: %s" % content)
-                reply = Reply(ReplyType.TEXT, "🎉正在执行，请稍候...")
+                reply = Reply(ReplyType.TEXT, "🎉请稍候...")
                 channel = e_context["channel"]
                 channel.send(reply, context)
 
@@ -165,7 +169,7 @@ class BotChoice(Plugin):
                         logger.debug(
                             f"[BotChoice] image_url: {image_url}, image_headers: {image_headers}, image_payload: {image_payload}")
                         response = requests.post(image_url, headers={**image_headers, **headers},
-                                                 json=image_payload, timeout=80)
+                                                 json=image_payload, timeout=80,verify=False)
                         response.raise_for_status()
                         result = response.json()
                         logger.debug(f"[BotChoice] Image API response: {result}")
@@ -287,19 +291,23 @@ class BotChoice(Plugin):
                 try:
                     media_type = self._get_content(url)
                     if media_type == ReplyType.IMAGE_URL:
+                         # 优先发送图片URL
+                        reply = Reply(ReplyType.IMAGE_URL, url)
+                        channel = e_context["channel"]
+                        channel.send(reply, context)
+                        
                         # 下载图片
                         headers = {
                                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"}
-                        image_response = requests.get(url, headers=headers, stream=True, timeout=35)
+                        image_response = requests.get(url, headers=headers, stream=True, timeout=self.image_download_timeout,verify=False)
                         image_response.raise_for_status()
                         image_data = image_response.content
                         image_file = io.BytesIO(image_data)
-                      
+
                         # 发送图片二进制数据
                         reply = Reply(ReplyType.IMAGE, image_file)
                         channel = e_context["channel"]
-                        channel.send(reply, context)
-
+                       # channel.send(reply, context)
                     elif media_type == ReplyType.VIDEO_URL:
                         reply = Reply(ReplyType.VIDEO_URL, url)
                         channel = e_context["channel"]
